@@ -1,22 +1,23 @@
-# ----- Stage 1: Build WAR với Maven -----
-FROM maven:3.9.6-eclipse-temurin-17 AS build
+# Stage 1: build WAR bằng Maven (Java 21)
+FROM maven:3.9.4-eclipse-temurin-21 AS build
 WORKDIR /app
-COPY pom.xml .
-COPY src ./src
-RUN mvn -q -DskipTests package
+COPY . .
+RUN mvn -B -DskipTests clean package
 
-# ----- Stage 2: Chạy trên Tomcat 10.1 -----
-FROM tomcat:10.1-jdk21
+# Stage 2: chạy ứng dụng với Tomcat
+FROM tomcat:11.0-jre21-temurin
 
-# Xóa webapp mẫu để dùng ROOT của mình
+# (Tuỳ chọn) Tắt shutdown port 8005 để tránh spam log
+RUN sed -i 's/port="8005"/port="-1"/' /usr/local/tomcat/conf/server.xml
+
+# Xoá các ứng dụng mặc định của Tomcat
 RUN rm -rf /usr/local/tomcat/webapps/*
 
-# Deploy app thành ROOT.war để chạy tại "/"
-COPY --from=build /app/target/*.war /usr/local/tomcat/webapps/ROOT.war
+# Copy file .war từ stage 1 vào thư mục webapps của Tomcat ở stage 2
+COPY --from=build /app/target/web3-1.0-SNAPSHOT.war /usr/local/tomcat/webapps/ROOT.war
 
-# Render yêu cầu service LISTEN trên $PORT (mặc định 10000)
-ENV PORT=10000
-EXPOSE 10000
+# Mở port 8080 để có thể truy cập ứng dụng từ bên ngoài container
+EXPOSE 8080
 
-# Đổi cổng Connector của Tomcat = $PORT rồi chạy
-CMD ["sh","-c","sed -i \"s/port=\\\"8080\\\"/port=\\\"$PORT\\\"/\" /usr/local/tomcat/conf/server.xml && catalina.sh run"]
+# Lệnh mặc định khi container khởi động là chạy Tomcat
+CMD ["catalina.sh","run"]
